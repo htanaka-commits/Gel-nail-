@@ -439,7 +439,7 @@ with st.expander("📸 パッケージの写真から全成分を読み取る", 
             with st.spinner("AIが画像内の文字を解析中です..."):
                 try:
                     genai.configure(api_key=api_key)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-3.8-flash')
                     img = Image.open(uploaded_file).convert('RGB')
                     prompt = "この写真に含まれる「全成分表示」を読み取り、化粧品の成分名だけを抽出してカンマ(,)区切りで出力してください。関係ない文字は含めないでください。"
                     response = model.generate_content([prompt, img])
@@ -493,7 +493,7 @@ if st.button("リスクを解析する"):
         else:
             with st.spinner("未登録成分の毒性データをAI（公的機関データソース）で検索しています..."):
                 genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-3.8-flash')
                 
                 for u_comp in unmatched_names:
                     prompt = f"""
@@ -523,7 +523,7 @@ if st.button("リスクを解析する"):
                             '備考': ai_data.get('REMARKS', '【AI推論】詳細不明')
                         })
                     except Exception as e:
-                        st.error(f"「{u_comp}」のAI検索中にエラーが発生しました。")
+                        st.error(f"「{u_comp}」のAI検索中にエラーが発生しました: {e}")
 
     # -------------------------
     # 4. 評価とチャート描画
