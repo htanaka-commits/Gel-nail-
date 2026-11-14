@@ -3,5 +3,5 @@ pandas
 matplotlib
 japanize-matplotlib
 setuptools
-google-generativeai
+google-generativeai>=0.7.0
 pillow
