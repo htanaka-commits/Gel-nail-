@@ -6,10 +6,11 @@ import japanize_matplotlib
 import unicodedata
 import google.generativeai as genai
 import json
+import re
 from PIL import Image
 
 # -------------------------
-# 1. 成分データベース (全55成分・EC3妥当性備考付き)
+# 1. 成分データベース (全55成分)
 # -------------------------
 db_data = [
     # --- モノマー・オリゴマー・開始剤（40成分） ---
@@ -405,7 +406,7 @@ def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
 st.set_page_config(page_title="ジェルネイル成分リスク評価シミュレーター", layout="wide")
 
 if 'input_text' not in st.session_state:
-    st.session_state['input_text'] = "ジカルバミン酸ジＨＥＭＡトリメチルヘキシル, メタクリル酸2-ヒドロキシエチル, 酢酸エチル, (未知の成分例) HEMA-P"
+    st.session_state['input_text'] = "ジカルバミン酸ジＨＥＭＡトリメチルヘキシル, メタクリル酸2-ヒドロキシエチル, 酢酸エチル"
 
 st.sidebar.title("📚 成分データベース情報")
 st.sidebar.info(f"現在 **{len(db_data)}種類** の成分がローカル登録されています。")
@@ -454,7 +455,10 @@ input_text = st.text_area("▼ ここに成分表をカンマ（,）または読
 
 if st.button("リスクを解析する"):
     st.session_state['input_text'] = input_text
-    components = [c.strip() for c in input_text.replace('、', ',').split(',') if c.strip()]
+    
+    # ★修正箇所：カッコ()の中にあるカンマでは区切らないようにする安全な分割処理
+    split_pattern = r'[,、]\s*(?![^\(]*\))'
+    components = [c.strip() for c in re.split(split_pattern, input_text) if c.strip()]
     
     if not components:
         st.warning("成分が入力されていません。")
@@ -489,8 +493,13 @@ if st.button("リスクを解析する"):
     # 2. 未登録成分に対するAI自動検索（フォールバック）
     if unmatched_names:
         if not api_key:
-            st.warning(f"以下の成分はデータベースに未登録です。AIによる自動検索を行うにはAPIキーを設定してください。\n\n未登録成分: {', '.join(unmatched_names)}")
+            st.warning(f"以下の成分はデータベースに未登録です。AI検索を行うにはAPIキーを設定してください。\n\n未登録成分: {', '.join(unmatched_names)}")
         else:
+            # ★修正箇所：未知の成分が多すぎる場合はAPI制限オーバーを防ぐため最大5件でストップ
+            if len(unmatched_names) > 5:
+                st.warning(f"⚠️ 未登録の成分が多すぎます（{len(unmatched_names)}件）。APIの無料枠を保護するため、上位5件のみAI検索を実行します。")
+                unmatched_names = unmatched_names[:5]
+
             with st.spinner("未登録成分の毒性データをAI（公的機関データソース）で検索しています..."):
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel('gemini-3.8-flash')
@@ -594,7 +603,6 @@ if st.button("リスクを解析する"):
                             plt.close(fig_indiv)
                             st.caption(f"MW: **{item['MW']} Da** | EC3: **{item['EC3']}%** | PII: **{item['PII']}**")
                             
-                            # 未登録成分の場合、AIが取得した公的ソースの情報を表示
                             if "(AI検索)" in item['表示用名称']:
                                 st.info(f"🤖 {item['備考']}")
                             else:
