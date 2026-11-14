@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import japanize_matplotlib  # クラウド環境での日本語文字化け対策
+import japanize_matplotlib
 import unicodedata
+import google.generativeai as genai
+from PIL import Image
 
 # -------------------------
 # 1. 成分データベース (全55成分・EC3妥当性備考付き)
@@ -44,7 +46,7 @@ db_data = [
         '代表名': 'トリアクリル酸PPG-3グリセリルエーテル',
         '別名リスト': ['PPG-3-GTA', 'トリアクリル酸PPG-3グリセリルエーテル', 'PPG-3グリセリルトリアクリレート'],
         'MW': 428, 'EC3': 1.75, 'PII': 2.5,
-        '備考': '【妥当性】多官能アクリレート特 ঐতিの強感作性（EC3<2%）。分子量は大きいが架橋能が要因となる。'
+        '備考': '【妥当性】多官能アクリレート特有の強感作性（EC3<2%）。分子量は大きいが架橋能が要因となる。'
     },
     {
         '代表名': 'テトラメルカプトプロピオン酸ペンタエリスリチル',
@@ -381,11 +383,11 @@ def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
     
     max_score = max(s1, s2, s3)
     if risk_idx >= 40.0 or ec3 <= 2.5 or max_score >= 8.0:
-        color = '#d62728'  # 高リスク（赤）
+        color = '#d62728'
     elif risk_idx >= 15.0 or ec3 <= 15.0 or max_score >= 5.0:
-        color = '#ff7f0e'  # 中リスク（オレンジ）
+        color = '#ff7f0e'
     else:
-        color = '#2ca02c'  # 低リスク（緑）
+        color = '#2ca02c'
         
     ax.plot(angles, risk_scores, color=color, linewidth=2, linestyle='solid')
     ax.fill(angles, risk_scores, color=color, alpha=0.4)
@@ -401,8 +403,12 @@ def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
 # -------------------------
 st.set_page_config(page_title="ジェルネイル成分リスク評価シミュレーター", layout="wide")
 
+# 初期状態のテキストをセッションに保存
+if 'input_text' not in st.session_state:
+    st.session_state['input_text'] = "ジカルバミン酸ジＨＥＭＡトリメチルヘキシル, メタクリル酸2-ヒドロキシエチル, アクリル酸2-ヒドロキシエチル, 酢酸エチル"
+
 st.sidebar.title("📚 成分データベース情報")
-st.sidebar.info(f"現在 **{len(db_data)}種類** のモノマー・オリゴマー・開始剤・有機溶剤が登録されています。")
+st.sidebar.info(f"現在 **{len(db_data)}種類** の成分が登録されています。")
 
 search_filter = st.sidebar.text_input("データベース内をキーワード検索", placeholder="例: メタクリル酸, 酢酸, HEMA")
 with st.sidebar.expander("登録済み全成分リストを見る", expanded=True):
@@ -410,13 +416,53 @@ with st.sidebar.expander("登録済み全成分リストを見る", expanded=Tru
         if not search_filter or normalize_text(search_filter) in normalize_text(item['代表名']) or any(normalize_text(search_filter) in normalize_text(a) for a in item['別名リスト']):
             st.caption(f"・**{item['代表名']}** ({item['別名リスト'][0]})")
 
+# --- 画像読み取り機能用サイドバー ---
+st.sidebar.markdown("---")
+st.sidebar.title("📷 画像から成分を自動入力")
+api_key = st.sidebar.text_input("Gemini APIキー（画像OCR用）", type="password", help="画像読み取り機能を使う場合のみ必要です")
+
 st.title("💅 ジェルネイル成分 リスク評価シミュレーター")
 st.markdown("登録データベース（全55成分）と照合し、レーダーチャートの占有面積から**「リスク指数（最大100%）」**を即時算出します。")
 
-input_text = st.text_area("▼ ここに成分表をカンマ（,）または読点（、）区切りで入力（略号・邦文どちらでも可）", 
-                          "ジカルバミン酸ジＨＥＭＡトリメチルヘキシル, メタクリル酸2-ヒドロキシエチル, アクリル酸2-ヒドロキシエチル, 酢酸エチル", height=100)
+# --- 画像OCRエリア ---
+with st.expander("📸 パッケージの写真から全成分を読み取る（要APIキー）", expanded=False):
+    uploaded_file = st.file_uploader("全成分表示が写った画像をアップロード、またはカメラで撮影", type=['png', 'jpg', 'jpeg'])
+    
+    if st.button("画像をテキスト化する"):
+        if not api_key:
+            st.error("左側のサイドバーに Gemini APIキー を入力してください。")
+        elif not uploaded_file:
+            st.error("画像をアップロードしてください。")
+        else:
+            with st.spinner("AIが画像内の文字を解析中です..."):
+                try:
+                    genai.configure(api_key=api_key)
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    img = Image.open(uploaded_file)
+                    
+                    prompt = """
+                    この写真に含まれる「全成分表示」を読み取り、化粧品の成分名だけを抽出してカンマ(,)区切りで出力してください。
+                    ルール：
+                    ・「全成分：」「水」「販売元」「内容量」などの関係ない文字は絶対に含めないでください。
+                    ・成分名のみをカンマで繋いだ純粋なテキストデータとして出力してください。
+                    """
+                    response = model.generate_content([prompt, img])
+                    
+                    # 読み取ったテキストをセッションステートに上書きして画面を更新
+                    st.session_state['input_text'] = response.text.strip()
+                    st.success("読み取りが完了しました！下の入力ボックスに自動反映されました。")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"読み取り中にエラーが発生しました: {e}")
+
+# テキスト入力エリア（セッションステートと連動）
+input_text = st.text_area("▼ ここに成分表をカンマ（,）または読点（、）区切りで入力", 
+                          value=st.session_state['input_text'], height=100)
 
 if st.button("データベースから検索してリスクを解析する"):
+    # セッションステートを手入力された最新のものに更新
+    st.session_state['input_text'] = input_text
+    
     components = [c.strip() for c in input_text.replace('、', ',').split(',') if c.strip()]
     
     if not components:
