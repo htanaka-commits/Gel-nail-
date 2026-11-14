@@ -437,7 +437,7 @@ with st.expander("📸 パッケージの写真から全成分を読み取る（
             with st.spinner("AIが画像内の文字を解析中です..."):
                 try:
                     genai.configure(api_key=api_key)
-                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    model = genai.GenerativeModel('gemini-3.8-flash')
                     img = Image.open(uploaded_file)
                     
                     prompt = """
