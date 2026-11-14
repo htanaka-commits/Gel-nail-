@@ -419,7 +419,14 @@ with st.sidebar.expander("登録済み全成分リストを見る", expanded=Tru
 # --- 画像読み取り機能用サイドバー ---
 st.sidebar.markdown("---")
 st.sidebar.title("📷 画像から成分を自動入力")
-api_key = st.sidebar.text_input("Gemini APIキー（画像OCR用）", type="password", help="画像読み取り機能を使う場合のみ必要です")
+
+# ★ SecretsからAPIキーを自動取得（設定されている場合）
+api_key = ""
+if "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    st.sidebar.success("✅ Gemini APIキー（クラウド設定済み）")
+else:
+    api_key = st.sidebar.text_input("Gemini APIキー（画像OCR用）", type="password", help="画像読み取り機能を使う場合のみ必要です")
 
 st.title("💅 ジェルネイル成分 リスク評価シミュレーター")
 st.markdown("登録データベース（全55成分）と照合し、レーダーチャートの占有面積から**「リスク指数（最大100%）」**を即時算出します。")
@@ -430,7 +437,7 @@ with st.expander("📸 パッケージの写真から全成分を読み取る（
     
     if st.button("画像をテキスト化する"):
         if not api_key:
-            st.error("左側のサイドバーに Gemini APIキー を入力してください。")
+            st.error("左側のサイドバー、またはクラウド設定（Secrets）に Gemini APIキー を設定してください。")
         elif not uploaded_file:
             st.error("画像をアップロードしてください。")
         else:
