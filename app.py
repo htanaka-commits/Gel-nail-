@@ -432,7 +432,7 @@ st.title("💅 ジェルネイル成分 リスク評価シミュレーター")
 st.markdown("登録データベース（全55成分）と照合し、レーダーチャートの占有面積から**「リスク指数（最大100%）」**を即時算出します。")
 
 # --- 画像OCRエリア ---
-with st.expander("📸 パッケージの写真から全成分を読み取る（要APIキー）", expanded=False):
+with st.expander("📸 パッケージの写真から全成分を読み取る", expanded=False):
     uploaded_file = st.file_uploader("全成分表示が写った画像をアップロード、またはカメラで撮影", type=['png', 'jpg', 'jpeg'])
     
     if st.button("画像をテキスト化する"):
@@ -444,8 +444,10 @@ with st.expander("📸 パッケージの写真から全成分を読み取る（
             with st.spinner("AIが画像内の文字を解析中です..."):
                 try:
                     genai.configure(api_key=api_key)
+                    # 最新モデルの指定
                     model = genai.GenerativeModel('gemini-3.8-flash')
-                    img = Image.open(uploaded_file)
+                    # 透明背景（RGBA等）でのフリーズを防ぐため RGB に変換
+                    img = Image.open(uploaded_file).convert('RGB')
                     
                     prompt = """
                     この写真に含まれる「全成分表示」を読み取り、化粧品の成分名だけを抽出してカンマ(,)区切りで出力してください。
