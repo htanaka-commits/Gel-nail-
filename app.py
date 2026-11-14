@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import japanize_matplotlib
 import unicodedata
 import google.generativeai as genai
+import json
 from PIL import Image
 
 # -------------------------
@@ -403,75 +404,56 @@ def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
 # -------------------------
 st.set_page_config(page_title="ジェルネイル成分リスク評価シミュレーター", layout="wide")
 
-# 初期状態のテキストをセッションに保存
 if 'input_text' not in st.session_state:
-    st.session_state['input_text'] = "ジカルバミン酸ジＨＥＭＡトリメチルヘキシル, メタクリル酸2-ヒドロキシエチル, アクリル酸2-ヒドロキシエチル, 酢酸エチル"
+    st.session_state['input_text'] = "ジカルバミン酸ジＨＥＭＡトリメチルヘキシル, メタクリル酸2-ヒドロキシエチル, 酢酸エチル, (未知の成分例) HEMA-P"
 
 st.sidebar.title("📚 成分データベース情報")
-st.sidebar.info(f"現在 **{len(db_data)}種類** の成分が登録されています。")
+st.sidebar.info(f"現在 **{len(db_data)}種類** の成分がローカル登録されています。")
 
-search_filter = st.sidebar.text_input("データベース内をキーワード検索", placeholder="例: メタクリル酸, 酢酸, HEMA")
+search_filter = st.sidebar.text_input("データベース内をキーワード検索", placeholder="例: メタクリル酸, 酢酸")
 with st.sidebar.expander("登録済み全成分リストを見る", expanded=True):
     for item in db_data:
         if not search_filter or normalize_text(search_filter) in normalize_text(item['代表名']) or any(normalize_text(search_filter) in normalize_text(a) for a in item['別名リスト']):
             st.caption(f"・**{item['代表名']}** ({item['別名リスト'][0]})")
 
-# --- 画像読み取り機能用サイドバー ---
 st.sidebar.markdown("---")
-st.sidebar.title("📷 画像から成分を自動入力")
-
-# ★ SecretsからAPIキーを自動取得（設定されている場合）
+st.sidebar.title("🔑 API連携ステータス")
 api_key = ""
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
-    st.sidebar.success("✅ Gemini APIキー（クラウド設定済み）")
+    st.sidebar.success("✅ Gemini APIキー（クラウド設定済み）\n\nOCRおよび未登録成分の自動AI検索が利用可能です。")
 else:
-    api_key = st.sidebar.text_input("Gemini APIキー（画像OCR用）", type="password", help="画像読み取り機能を使う場合のみ必要です")
+    api_key = st.sidebar.text_input("Gemini APIキー", type="password", help="OCRや未登録成分のAI検索に必要です")
 
 st.title("💅 ジェルネイル成分 リスク評価シミュレーター")
-st.markdown("登録データベース（全55成分）と照合し、レーダーチャートの占有面積から**「リスク指数（最大100%）」**を即時算出します。")
+st.markdown("ローカルデータベースを優先参照し、**未登録の成分についてはAIが公的機関（ECHA等）のデータを元に毒性値を推論・補完**します。")
 
-# --- 画像OCRエリア ---
 with st.expander("📸 パッケージの写真から全成分を読み取る", expanded=False):
     uploaded_file = st.file_uploader("全成分表示が写った画像をアップロード、またはカメラで撮影", type=['png', 'jpg', 'jpeg'])
-    
     if st.button("画像をテキスト化する"):
         if not api_key:
-            st.error("左側のサイドバー、またはクラウド設定（Secrets）に Gemini APIキー を設定してください。")
+            st.error("APIキーが設定されていません。")
         elif not uploaded_file:
             st.error("画像をアップロードしてください。")
         else:
             with st.spinner("AIが画像内の文字を解析中です..."):
                 try:
                     genai.configure(api_key=api_key)
-                    # 最新モデルの指定
-                    model = genai.GenerativeModel('gemini-3.8-flash')
-                    # 透明背景（RGBA等）でのフリーズを防ぐため RGB に変換
+                    model = genai.GenerativeModel('gemini-1.5-flash')
                     img = Image.open(uploaded_file).convert('RGB')
-                    
-                    prompt = """
-                    この写真に含まれる「全成分表示」を読み取り、化粧品の成分名だけを抽出してカンマ(,)区切りで出力してください。
-                    ルール：
-                    ・「全成分：」「水」「販売元」「内容量」などの関係ない文字は絶対に含めないでください。
-                    ・成分名のみをカンマで繋いだ純粋なテキストデータとして出力してください。
-                    """
+                    prompt = "この写真に含まれる「全成分表示」を読み取り、化粧品の成分名だけを抽出してカンマ(,)区切りで出力してください。関係ない文字は含めないでください。"
                     response = model.generate_content([prompt, img])
-                    
-                    # 読み取ったテキストをセッションステートに上書きして画面を更新
                     st.session_state['input_text'] = response.text.strip()
                     st.success("読み取りが完了しました！下の入力ボックスに自動反映されました。")
                     st.rerun()
                 except Exception as e:
                     st.error(f"読み取り中にエラーが発生しました: {e}")
 
-# テキスト入力エリア（セッションステートと連動）
 input_text = st.text_area("▼ ここに成分表をカンマ（,）または読点（、）区切りで入力", 
                           value=st.session_state['input_text'], height=100)
 
-if st.button("データベースから検索してリスクを解析する"):
-    # セッションステートを手入力された最新のものに更新
+if st.button("リスクを解析する"):
     st.session_state['input_text'] = input_text
-    
     components = [c.strip() for c in input_text.replace('、', ',').split(',') if c.strip()]
     
     if not components:
@@ -479,11 +461,11 @@ if st.button("データベースから検索してリスクを解析する"):
         st.stop()
 
     matched_data = []
-    unmatched_components = []
+    unmatched_names = []
     
+    # 1. ローカルデータベース検索
     for comp in components:
         norm_comp = normalize_text(comp)
-        
         found_item = None
         for item in db_data:
             normalized_aliases = [normalize_text(alias) for alias in item['別名リスト']]
@@ -502,19 +484,46 @@ if st.button("データベースから検索してリスクを解析する"):
                     '備考': found_item.get('備考', '')
                 })
         else:
-            suggestions = [
-                item['代表名'] for item in db_data 
-                if norm_comp in normalize_text(item['代表名']) or any(norm_comp in normalize_text(a) for a in item['別名リスト'])
-            ]
-            unmatched_components.append((comp, suggestions))
+            unmatched_names.append(comp)
 
-    if unmatched_components:
-        with st.expander(f"ℹ️ データベース未登録の成分が {len(unmatched_components)} 件ありました（評価対象外）", expanded=True):
-            for u_comp, suggs in unmatched_components:
-                if suggs:
-                    st.write(f"・**{u_comp}**: 未登録（※もしかして: `{', '.join(suggs)}` ？）")
-                else:
-                    st.write(f"・**{u_comp}**: データベースに該当なし（顔料・増粘剤・未登録成分など）")
+    # 2. 未登録成分に対するAI自動検索（フォールバック）
+    if unmatched_names:
+        if not api_key:
+            st.warning(f"以下の成分はデータベースに未登録です。AIによる自動検索を行うにはAPIキーを設定してください。\n\n未登録成分: {', '.join(unmatched_names)}")
+        else:
+            with st.spinner("未登録成分の毒性データをAI（公的機関データソース）で検索しています..."):
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                for u_comp in unmatched_names:
+                    prompt = f"""
+                    あなたは毒性学の専門家です。ジェルネイル・化粧品成分「{u_comp}」について、ECHA（欧州化学品庁）、CIR（化粧品成分審査パネル）、SCCS（欧州消費者安全科学委員会）などの公的機関のデータに基づき、以下の情報をJSON形式のみで出力してください。
+                    正確な値が不明な場合は、類似の化学構造から推定されるワーストケースの値を出力してください。
+                    
+                    出力フォーマット（これ以外の文字やMarkdown記号は絶対に出力しないでください）:
+                    {{
+                        "JP_NAME": "日本語の正式な成分名",
+                        "MW": 分子量(数値のみ),
+                        "EC3": LLNA EC3値%(数値のみ、非感作性なら35.0),
+                        "PII": 一次刺激性指数(0〜8の数値のみ),
+                        "REMARKS": "【AI推論/出典: (参考にした公的機関名)】 ...妥当性の説明..."
+                    }}
+                    """
+                    try:
+                        response = model.generate_content(prompt)
+                        json_str = response.text.replace('```json', '').replace('```', '').strip()
+                        ai_data = json.loads(json_str)
+                        
+                        matched_data.append({
+                            '成分名': ai_data.get('JP_NAME', u_comp),
+                            '表示用名称': f"{ai_data.get('JP_NAME', u_comp)} (AI検索)",
+                            'MW': float(ai_data.get('MW', 100)),
+                            'EC3': float(ai_data.get('EC3', 1.5)),
+                            'PII': float(ai_data.get('PII', 5.0)),
+                            '備考': ai_data.get('REMARKS', '【AI推論】詳細不明')
+                        })
+                    except Exception as e:
+                        st.error(f"「{u_comp}」のAI検索中にエラーが発生しました。")
 
     # -------------------------
     # 4. 評価とチャート描画
@@ -558,7 +567,7 @@ if st.button("データベースから検索してリスクを解析する"):
             plt.close(fig_total)
 
         st.divider()
-        st.subheader(f"🧪 2. 一致した配合成分ごとの個別リスクプロファイル一覧（全{len(matched_data)}成分）")
+        st.subheader(f"🧪 2. 配合成分ごとの個別リスクプロファイル一覧（全{len(matched_data)}成分）")
         
         cols_per_row = 3
         for idx in range(0, len(matched_data), cols_per_row):
@@ -584,6 +593,9 @@ if st.button("データベースから検索してリスクを解析する"):
                             st.pyplot(fig_indiv)
                             plt.close(fig_indiv)
                             st.caption(f"MW: **{item['MW']} Da** | EC3: **{item['EC3']}%** | PII: **{item['PII']}**")
-                            st.info(f"💡 {item['備考']}")
-    else:
-        st.error("入力された成分の中で、データベースに一致するものがありませんでした。左側のサイドバーから登録済み成分名をご確認のうえ入力してください。")
+                            
+                            # 未登録成分の場合、AIが取得した公的ソースの情報を表示
+                            if "(AI検索)" in item['表示用名称']:
+                                st.info(f"🤖 {item['備考']}")
+                            else:
+                                st.info(f"💡 {item['備考']}")
