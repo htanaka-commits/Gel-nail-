@@ -116,13 +116,14 @@ st.markdown("""
     }
 
     /* =========================================================
-       ★ PDF出力用（印刷時）の最適化CSS（A4・改ページ崩れ防止版）
+       ★ PDF出力用（印刷時）の最適化CSS
        ========================================================= */
     @media print {
         @page {
             size: A4 portrait;
             margin: 10mm;
         }
+        
         /* 印刷時は不要なUIを完全に消す */
         [data-testid="stSidebar"], 
         header, 
@@ -145,20 +146,31 @@ st.markdown("""
             background-color: #FFFFFF !important;
         }
         
-        /* ★ 修正箇所：カードやカラムの途中での改ページ（ページ跨ぎ）を強制的に禁止する */
-        div[data-testid="column"] {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
+        /* ★ 修正1：総合評価（リスクバー）を印刷時のみコンパクトにする */
+        .risk-bar-container {
+            padding: 15px 20px !important;
+            margin: 5px 0 15px 0 !important;
         }
-        
+        .risk-score-text {
+            font-size: 28px !important; /* 42pxから縮小 */
+        }
+        .risk-score-percent {
+            font-size: 14px !important; /* 20pxから縮小 */
+        }
+        div[data-testid="stMetric"] {
+            padding: 10px !important; /* メトリクスの余白も縮小 */
+        }
+
+        /* ★ 修正2：成分カードのページまたぎ（分断）を強力に防ぐハック */
         div[data-testid="stVerticalBlockBorderWrapper"] {
             page-break-inside: avoid !important;
-            break-inside: avoid !important;
+            break-inside: avoid-page !important;
             -webkit-column-break-inside: avoid !important;
-            display: block !important; /* 要素の崩れを防ぐ */
+            display: inline-block !important; /* ブラウザにブロックとして認識させる */
+            width: 100% !important;
             box-shadow: none !important;
             border: 1px solid #DDDDDD !important;
-            margin-bottom: 15px !important;
+            margin-bottom: 10px !important;
         }
         
         /* グラフ画像の分離を防ぐ */
@@ -240,11 +252,12 @@ def get_risk_color_and_label(risk_idx):
 
 def render_risk_bar(risk_idx):
     color, label = get_risk_color_and_label(risk_idx)
+    # CSSクラス（risk-bar-container 等）を付与して印刷時に制御しやすくしました
     bar_html = f"""
-    <div style="margin: 10px 0 30px 0; padding: 30px 35px; background: #ffffff; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.04); border: 1px solid #F5F5F5;">
+    <div class="risk-bar-container" style="margin: 10px 0 30px 0; padding: 30px 35px; background: #ffffff; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.04); border: 1px solid #F5F5F5;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
             <span style="font-size: 14px; font-weight: 600; color: #888; letter-spacing: 2px;">TOTAL RISK SCORE</span>
-            <span style="font-size: 42px; font-weight: 300; color: {color}; line-height: 1;">{risk_idx}<span style="font-size: 20px; font-weight: 400; color: #BBBBBB; margin-left: 6px;">%</span></span>
+            <span class="risk-score-text" style="font-size: 42px; font-weight: 300; color: {color}; line-height: 1;">{risk_idx}<span class="risk-score-percent" style="font-size: 20px; font-weight: 400; color: #BBBBBB; margin-left: 6px;">%</span></span>
         </div>
         <div style="width: 100%; background-color: #F0F2F5; border-radius: 20px; height: 10px; overflow: hidden; position: relative;">
             <div style="width: {min(risk_idx, 100.0)}%; background-color: {color}; height: 100%; border-radius: 20px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
@@ -445,7 +458,8 @@ if analyze_submitted:
         if total_risk_idx < 25.0 and max(ts1, ts2, ts3) >= 8.0:
             st.warning("⚠️ **単一リスク突出警告**: 総合リスクは低めですが、特定のリスク項目が極めて高い水準にあります。")
         
-        fig_total, _, _ = create_radar_chart(worst_mw, worst_ec3, worst_pii, title=f"全体のリスクバランス", figsize=(5.0, 5.0), font_size=10)
+        # 総合評価のレーダーチャート（少しサイズダウンしてバランス調整）
+        fig_total, _, _ = create_radar_chart(worst_mw, worst_ec3, worst_pii, title=f"全体のリスクバランス", figsize=(4.2, 4.2), font_size=9)
         
         _, center_col, _ = st.columns([1, 2, 1])
         with center_col:
@@ -478,7 +492,6 @@ if analyze_submitted:
                             if item['備考']:
                                 st.markdown(f"<div style='font-size:11px; color:#666; padding:8px; background:#F9F9F9; border-radius:4px;'>{item['備考']}</div>", unsafe_allow_html=True)
         
-        # 免責事項
         disclaimer_html = """
         <div style="margin-top: 40px; padding: 20px; border: 1px solid #EAEAEA; border-radius: 8px; background-color: #FAFAFC; font-size: 11px; color: #888; line-height: 1.6; text-align: justify;">
             <strong style="color: #555; letter-spacing: 1px;">DISCLAIMER / 免責事項</strong><br>
@@ -487,5 +500,4 @@ if analyze_submitted:
         """
         st.markdown(disclaimer_html, unsafe_allow_html=True)
         
-        # PDFエクスポートボタン
         render_pdf_export_button()
