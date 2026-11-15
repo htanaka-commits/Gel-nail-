@@ -63,6 +63,34 @@ def calc_risk_index(mw, ec3, pii):
     risk_idx = ((s1 * s2 + s2 * s3 + s3 * s1) / 300.0) * 100.0
     return round(risk_idx, 1), (s1, s2, s3)
 
+def get_risk_color_and_label(risk_idx):
+    if risk_idx < 15.0:
+        return "#2ca02c", "低リスク（比較的安全）"
+    elif risk_idx < 40.0:
+        return "#ff7f0e", "中リスク（要注意）"
+    else:
+        return "#d62728", "高リスク（厳重警戒）"
+
+def render_risk_bar(risk_idx):
+    color, label = get_risk_color_and_label(risk_idx)
+    bar_html = f"""
+    <div style="margin-top: 10px; margin-bottom: 30px; padding: 20px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e0e0e0;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
+            <span style="font-size: 20px; font-weight: bold; color: #333;">🔥 製品の総合リスク指数: <span style="color: {color};">{label}</span></span>
+            <span style="font-size: 28px; font-weight: bold; color: {color};">{risk_idx} <span style="font-size: 16px;">%</span></span>
+        </div>
+        <div style="width: 100%; background-color: #e6e6e6; border-radius: 10px; height: 30px; overflow: hidden;">
+            <div style="width: {min(risk_idx, 100.0)}%; background-color: {color}; height: 100%; transition: width 0.5s ease-in-out;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 12px; color: #666;">
+            <span>0% (安全)</span>
+            <span>40% (警告ライン)</span>
+            <span>100% (極大リスク)</span>
+        </div>
+    </div>
+    """
+    st.markdown(bar_html, unsafe_allow_html=True)
+
 def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
     risk_idx, (s1, s2, s3) = calc_risk_index(mw, ec3, pii)
     risk_scores = [s1, s2, s3]
@@ -81,13 +109,7 @@ def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
     plt.yticks([2, 4, 6, 8, 10], ["2", "4", "6", "8", "MAX"], color="grey", size=font_size-2)
     plt.ylim(0, 10)
     
-    max_score = max(s1, s2, s3)
-    if risk_idx >= 40.0 or ec3 <= 2.5 or max_score >= 8.0:
-        color = '#d62728'
-    elif risk_idx >= 15.0 or ec3 <= 15.0 or max_score >= 5.0:
-        color = '#ff7f0e'
-    else:
-        color = '#2ca02c'
+    color, _ = get_risk_color_and_label(risk_idx)
         
     ax.plot(angles, risk_scores, color=color, linewidth=2, linestyle='solid')
     ax.fill(angles, risk_scores, color=color, alpha=0.4)
@@ -139,7 +161,6 @@ if st.button("リスクを解析する"):
     unmatched_names = []
     all_analyzed_names = []
     
-    # 1. ローカルデータベース検索
     for comp in components:
         norm_comp = normalize_text(comp)
         found_item = None
@@ -164,19 +185,15 @@ if st.button("リスクを解析する"):
             unmatched_names.append(comp)
             all_analyzed_names.append(f"【未】{comp}")
 
-    # ---------------------------------------------------------
-    # スプレッドシートへの送信ロジック（そのまま保持）
-    # ---------------------------------------------------------
+    # スプレッドシートへの送信ロジック
     def log_to_spreadsheet(component_list):
         if not component_list:
             return
         current_list_str = ",".join(component_list)
         if st.session_state.get('last_logged_list') == current_list_str:
             return
-        
         url = "https://docs.google.com/forms/d/e/1FAIpQLSdiSHSWGtG2th3k5uvU5lOujfDGjLqLXIUHIt-olNK4RxCJtg/formResponse"
         form_data = {"entry.796504215": current_list_str}
-        
         try:
             requests.post(url, data=form_data)
             st.session_state['last_logged_list'] = current_list_str
@@ -185,7 +202,6 @@ if st.button("リスクを解析する"):
 
     log_to_spreadsheet(all_analyzed_names)
 
-    # 2. 未登録成分の画面警告
     if unmatched_names:
         st.error(f"🚨 **データベース未登録エラー**: 以下の {len(unmatched_names)} 成分がデータベースに見つかりませんでした。")
         st.code("\n".join(unmatched_names), language="text")
@@ -212,20 +228,20 @@ if st.button("リスクを解析する"):
         
         total_risk_idx, (ts1, ts2, ts3) = calc_risk_index(worst_mw, worst_ec3, worst_pii)
         
-        fig_total, _, _ = create_radar_chart(
-            worst_mw, worst_ec3, worst_pii, 
-            title=f"総合リスクプロファイル (リスク指数: {total_risk_idx}%)", 
-            figsize=(5.5, 5.5), font_size=10
-        )
+        # 巨大なリスクプログレスバーを描画（一番目立つ位置に配置）
+        render_risk_bar(total_risk_idx)
         
-        col0, col1, col2, col3 = st.columns(4)
-        col0.metric("🔥 総合リスク指数", f"{total_risk_idx} %", "最大面積100%比", delta_color="inverse")
-        col1.metric("浸透リスク (最小MW)", f"{worst_mw} Da", f"原因: {worst_mw_name}", delta_color="inverse")
-        col2.metric("アレルギーリスク (最低EC3)", f"{worst_ec3} %", f"原因: {worst_ec3_name}", delta_color="inverse")
-        col3.metric("刺激リスク (最高PII)", f"{worst_pii}", f"原因: {worst_pii_name}", delta_color="inverse")
+        # ワースト成分のサマリー（3列でスッキリ配置）
+        col1, col2, col3 = st.columns(3)
+        col1.metric("① 浸透リスク (最小MW)", f"{worst_mw} Da", f"原因: {worst_mw_name}", delta_color="inverse")
+        col2.metric("② アレルギーリスク (最低EC3)", f"{worst_ec3} %", f"原因: {worst_ec3_name}", delta_color="inverse")
+        col3.metric("③ 刺激リスク (最高PII)", f"{worst_pii}", f"原因: {worst_pii_name}", delta_color="inverse")
         
         if total_risk_idx < 25.0 and max(ts1, ts2, ts3) >= 8.0:
             st.warning("⚠️ **単一リスク突出警告**: 総合リスク指数は低めですが、特定のリスク項目が極めて高い水準にあります。皮膚への付着に注意が必要です。")
+        
+        # レーダーチャートの描画
+        fig_total, _, _ = create_radar_chart(worst_mw, worst_ec3, worst_pii, title=f"全体のリスクバランス", figsize=(5.5, 5.5), font_size=10)
         
         _, center_col, _ = st.columns([1, 2, 1])
         with center_col:
