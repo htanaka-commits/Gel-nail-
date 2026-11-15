@@ -14,24 +14,22 @@ import requests
 # -------------------------
 st.set_page_config(page_title="ジェルネイル成分リスク評価シミュレーター", layout="wide")
 
-# ★スタイリッシュにするためのカスタムCSS（フォームボタンにも対応）
 st.markdown("""
 <style>
-    /* 全体の背景色とフォントを整える */
+    /* 全体の背景色とフォント */
     .stApp {
         background-color: #FAFAFC;
         font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', sans-serif;
     }
     
-    /* タイトルの装飾 */
     h1 {
         color: #2C3E50;
         font-weight: 800;
         letter-spacing: 1.5px;
     }
     
-    /* 通常ボタン・フォームボタンを美しいグラデーションと立体感に */
-    .stButton > button, [data-testid="stFormSubmitButton"] > button {
+    /* 解析ボタン（青グラデーション） */
+    div[data-testid="column"]:nth-of-type(1) .stButton > button {
         background: linear-gradient(135deg, #6B73FF 0%, #000DFF 100%);
         color: white;
         border: none;
@@ -43,12 +41,30 @@ st.markdown("""
         transition: all 0.3s ease;
         width: 100%;
     }
-    .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
+    div[data-testid="column"]:nth-of-type(1) .stButton > button:hover {
         box-shadow: 0 6px 12px rgba(0,0,0,0.2);
         transform: translateY(-2px);
     }
+
+    /* クリアボタン（グレー） */
+    div[data-testid="column"]:nth-of-type(2) .stButton > button {
+        background: #E2E8F0;
+        color: #4A5568;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 24px;
+        font-size: 16px;
+        font-weight: bold;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+        width: 100%;
+    }
+    div[data-testid="column"]:nth-of-type(2) .stButton > button:hover {
+        background: #CBD5E0;
+        transform: translateY(-2px);
+    }
     
-    /* テキスト入力エリアのフォーカス時の美化 */
+    /* テキスト入力エリア */
     .stTextArea textarea {
         border-radius: 8px;
         border: 1px solid #DCE1E7;
@@ -59,7 +75,7 @@ st.markdown("""
         box-shadow: 0 0 0 2px rgba(107, 115, 255, 0.2);
     }
     
-    /* メトリクス（数値カード）のデザイン */
+    /* メトリクス（数値カード） */
     div[data-testid="stMetric"] {
         background-color: #FFFFFF;
         border-radius: 12px;
@@ -68,7 +84,7 @@ st.markdown("""
         border-left: 6px solid #2C3E50;
     }
     
-    /* 個別成分の枠（コンテナ）をカードUI化 */
+    /* 個別成分のカードUI化 */
     div[data-testid="stVerticalBlock"] > div > div[data-testid="stVerticalBlockBorderWrapper"] {
         border-radius: 12px;
         border: 1px solid #EAEAEA;
@@ -84,7 +100,7 @@ st.markdown("""
 
 
 # -------------------------
-# 1. データベース読み込み (CSV外部ファイル化)
+# 1. データベース読み込み
 # -------------------------
 @st.cache_data
 def load_database():
@@ -117,7 +133,7 @@ def normalize_text(text):
 
 
 # -------------------------
-# 2. リスク計算＆リスク指数算出関数
+# 2. リスク計算関数
 # -------------------------
 def norm_mw(mw): 
     if mw >= 500:
@@ -206,8 +222,13 @@ if not db_data:
     st.error("🚨 データベースファイル (`database.csv`) が見つかりません。")
     st.stop()
 
-if 'input_text' not in st.session_state:
-    st.session_state['input_text'] = "ウレタンアクリレート, メタクリル酸2-ヒドロキシエチル, 酸化チタン, 赤色202号, TPO, 酢酸エチル"
+# クリアボタン用のコールバック関数
+def clear_text():
+    st.session_state['input_area'] = ""
+
+# 初期値の設定
+if 'input_area' not in st.session_state:
+    st.session_state['input_area'] = "ウレタンアクリレート, メタクリル酸2-ヒドロキシエチル, 酸化チタン, 赤色202号, TPO, 酢酸エチル"
 
 st.sidebar.title("📚 データベース情報")
 st.sidebar.info(f"現在 **{len(db_data)}種類** の成分が登録されています。")
@@ -221,17 +242,18 @@ with st.sidebar.expander("登録済み全成分リスト", expanded=True):
 st.title("💅 ジェルネイル成分 リスクシミュレーター")
 st.markdown("ローカルデータベースを参照し、ジェルネイル成分の毒性リスクを算出します。未登録の成分は自動的に管理者に報告され、順次データベースへ追加されます。")
 
-# ★ここで「フォーム」機能を使用し、Ctrl+Enterを不要にする
-with st.form("analyze_form"):
-    input_text = st.text_area("▼ ここに成分表をカンマ（,）または読点（、）区切りで入力", 
-                              value=st.session_state['input_text'], height=120)
-    
-    # フォーム内の送信ボタン
-    submitted = st.form_submit_button("リスクを解析する ✨")
+# テキストエリア（session_stateと直接連動させるためkeyを指定）
+input_text = st.text_area("▼ ここに成分表をカンマ（,）または読点（、）区切りで入力", 
+                          key="input_area", height=120)
 
-if submitted:
-    st.session_state['input_text'] = input_text
-    
+# 解析ボタンとクリアボタンを横に並べる
+col1, col2 = st.columns([4, 1])
+with col1:
+    analyze_submitted = st.button("リスクを解析する ✨")
+with col2:
+    st.button("クリア 🗑️", on_click=clear_text)
+
+if analyze_submitted:
     split_pattern = r'[,、]\s*(?![^\(]*\))'
     components = [c.strip() for c in re.split(split_pattern, input_text) if c.strip()]
     
@@ -267,6 +289,7 @@ if submitted:
             unmatched_names.append(comp)
             all_analyzed_names.append(f"【未】{comp}")
 
+    # スプレッドシートへの送信
     def log_to_spreadsheet(component_list):
         if not component_list:
             return
