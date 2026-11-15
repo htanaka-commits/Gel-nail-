@@ -344,8 +344,7 @@ with st.sidebar.expander("登録済み全成分リスト", expanded=True):
 st.markdown("<h1>成分から導き出す、次世代の安全性評価プロファイル</h1>", unsafe_allow_html=True)
 st.markdown("<p style='color:#777; font-size: 15px; font-weight: 500; margin-bottom: 20px; letter-spacing: 1.5px;'>NAIL GEL INGREDIENT SIMULATOR</p>", unsafe_allow_html=True)
 
-# ★ 製品名入力欄
-product_name = st.text_input("製品名（任意・レポートに反映されます）", key="product_name", placeholder="例: KLOS ベースジェル 01")
+product_name = st.text_input("製品名（任意・レポートおよびログに反映されます）", key="product_name", placeholder="例: KLOS ベースジェル 01")
 
 input_text = st.text_area("成分表（カンマまたは読点区切り）を入力してください", 
                           key="input_area", height=120)
@@ -392,10 +391,17 @@ if analyze_submitted:
             unmatched_names.append(comp)
             all_analyzed_names.append(f"【未】{comp}")
 
-    def log_to_spreadsheet(component_list):
+    # ★ 製品名を含めてGoogleフォーム（スプレッドシート）へ送信
+    def log_to_spreadsheet(component_list, prod_name=""):
         if not component_list:
             return
-        current_list_str = ",".join(component_list)
+        clean_prod = prod_name.strip()
+        if clean_prod:
+            safe_prod = clean_prod.replace(",", " ").replace("、", " ")
+            current_list_str = f"【製品: {safe_prod}】, " + ",".join(component_list)
+        else:
+            current_list_str = ",".join(component_list)
+            
         if st.session_state.get('last_logged_list') == current_list_str:
             return
         url = "https://docs.google.com/forms/d/e/1FAIpQLSdiSHSWGtG2th3k5uvU5lOujfDGjLqLXIUHIt-olNK4RxCJtg/formResponse"
@@ -406,7 +412,7 @@ if analyze_submitted:
         except Exception:
             pass
 
-    log_to_spreadsheet(all_analyzed_names)
+    log_to_spreadsheet(all_analyzed_names, product_name)
 
     if unmatched_names:
         st.error(f"🚨 **データベース未登録**: 以下の {len(unmatched_names)} 成分がデータベースに見つかりませんでした。")
@@ -422,7 +428,6 @@ if analyze_submitted:
         
         st.divider()
         
-        # ★ 製品名が入力されている場合、レポート用ヘッダーカードを表示
         if safe_product_name:
             st.markdown(f"""
             <div style="margin-bottom: 20px; padding: 14px 24px; background-color: #FFFFFF; border-left: 4px solid #232526; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
