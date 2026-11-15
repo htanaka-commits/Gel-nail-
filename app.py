@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,13 +17,13 @@ st.set_page_config(page_title="ジェルネイル成分リスク評価シミュ�
 
 st.markdown("""
 <style>
-    /* 全体の背景色とフォント（高級感のあるゴシック体） */
+    /* 全体の背景色とフォント */
     .stApp {
         background-color: #F8F9FA;
         font-family: 'Helvetica Neue', 'Yu Gothic', 'YuGothic', 'Hiragino Kaku Gothic ProN', sans-serif;
     }
     
-    /* タイトルの洗練化（細字＋広めの文字間隔） */
+    /* タイトルの洗練化 */
     h1 {
         color: #111111;
         font-weight: 300;
@@ -30,7 +31,7 @@ st.markdown("""
         padding-bottom: 10px;
     }
     
-    /* 解析ボタン（エレガントなダークトーン・ピル形状） */
+    /* 解析ボタン */
     div[data-testid="column"]:nth-of-type(1) .stButton > button {
         background: linear-gradient(to right, #232526, #414345);
         color: white;
@@ -49,7 +50,7 @@ st.markdown("""
         transform: translateY(-2px);
     }
 
-    /* クリアボタン（洗練された細線の白抜き・ピル形状） */
+    /* クリアボタン */
     div[data-testid="column"]:nth-of-type(2) .stButton > button {
         background: transparent;
         color: #414345;
@@ -67,7 +68,7 @@ st.markdown("""
         background: #F0F0F0;
     }
     
-    /* テキスト入力エリアのクリーン化 */
+    /* テキスト入力エリア */
     .stTextArea textarea {
         border-radius: 12px;
         border: 1px solid #E0E0E0;
@@ -82,7 +83,7 @@ st.markdown("""
         box-shadow: 0 0 0 1px #414345;
     }
     
-    /* メトリクス（数値カード）のミニマル化 */
+    /* メトリクス */
     div[data-testid="stMetric"] {
         background-color: #FFFFFF;
         border-radius: 16px;
@@ -111,6 +112,42 @@ st.markdown("""
     div[data-testid="stVerticalBlock"] > div > div[data-testid="stVerticalBlockBorderWrapper"]:hover {
         transform: translateY(-5px);
         box-shadow: 0 12px 30px rgba(0,0,0,0.06);
+    }
+
+    /* =========================================================
+       ★ PDF出力用（印刷時）の最適化CSS
+       ========================================================= */
+    @media print {
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        /* 印刷時は不要なUI（入力欄、サイドバー、ボタン類）を完全に消す */
+        [data-testid="stSidebar"], 
+        header, 
+        .stTextArea, 
+        .stButton, 
+        iframe {
+            display: none !important;
+        }
+        /* 背景色を綺麗な白に固定し、用紙にフィットさせる */
+        .stApp, .main, .block-container {
+            background-color: #FFFFFF !important;
+            padding: 0 !important;
+            max-width: 100% !important;
+        }
+        /* 個別成分のカードがページまたぎで途中で切れないようにする設定 */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            page-break-inside: avoid !important;
+            box-shadow: none !important;
+            border: 1px solid #EEEEEE !important;
+        }
+        /* グラフ画像をA4幅に収める */
+        img {
+            max-width: 100% !important;
+            height: auto !important;
+            page-break-inside: avoid !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -228,11 +265,41 @@ def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
     ax.set_facecolor('#FFFFFF')
     
     if title:
-        # エラーになっていた letter-spacing を削除しました
         plt.title(title, size=font_size+2, fontweight='300', pad=15, color='#333333')
         
     plt.tight_layout()
     return fig, risk_idx, (s1, s2, s3)
+
+# ★ PDF出力用ボタンのコンポーネント定義
+def render_pdf_export_button():
+    components.html(
+        """
+        <style>
+        .print-btn {
+            background: linear-gradient(to right, #232526, #414345);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+            font-family: 'Helvetica Neue', sans-serif;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+            margin-top: 10px;
+        }
+        .print-btn:hover {
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+        </style>
+        <button class="print-btn" onclick="window.parent.print()">🖨️ REPORT PDF EXPORT / レポートを出力</button>
+        """,
+        height=80
+    )
 
 
 # -------------------------
@@ -335,9 +402,9 @@ if analyze_submitted:
         st.divider()
         st.markdown("<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:20px;'>01. 総合評価プロファイル</h3>", unsafe_allow_html=True)
         
-        base_components = df_matched.head(5)
-        worst_mw = base_components['MW'].min()
-        worst_mw_name = base_components.loc[base_components['MW'].idxmin()]['表示用名称']
+        # ★変更点：入力された「全成分」の中から最もMWが小さい成分をワーストとして厳密に評価する
+        worst_mw = df_matched['MW'].min()
+        worst_mw_name = df_matched.loc[df_matched['MW'].idxmin()]['表示用名称']
         
         worst_ec3 = df_matched['EC3'].min()
         worst_ec3_name = df_matched.loc[df_matched['EC3'].idxmin()]['表示用名称']
@@ -389,3 +456,7 @@ if analyze_submitted:
                             st.caption(f"MW: **{item['MW']} Da** | EC3: **{item['EC3']}%** | PII: **{item['PII']}**")
                             if item['備考']:
                                 st.markdown(f"<div style='font-size:11px; color:#666; padding:8px; background:#F9F9F9; border-radius:4px;'>{item['備考']}</div>", unsafe_allow_html=True)
+        
+        # 最後にPDFエクスポートボタンを配置
+        st.divider()
+        render_pdf_export_button()
