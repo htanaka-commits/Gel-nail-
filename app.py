@@ -182,10 +182,14 @@ def load_database():
                 
             for _, row in df.iterrows():
                 rep_name = str(row['代表名']).strip()
-                # カッコ内のカンマでは分割しないように修正
+                # カッコ内のカンマでは分割しない
                 raw_aliases = [alias.strip() for alias in re.split(r',\s*(?![^\(]*\))', str(row['別名リスト'])) if alias.strip()]
-                # 代表名と別名の両方を重複なしで検索対象に含める
                 search_aliases = list(dict.fromkeys([rep_name] + raw_aliases))
+                
+                # 区分列の読み込み（未記入や列未追加時は '通常' として扱う）
+                category = '通常'
+                if '区分' in df.columns and pd.notna(row['区分']) and str(row['区分']).strip():
+                    category = str(row['区分']).strip()
                 
                 db_list.append({
                     '代表名': rep_name,
@@ -194,7 +198,8 @@ def load_database():
                     'MW': float(row['MW']),
                     'EC3': float(row['EC3']),
                     'PII': float(row['PII']),
-                    '備考': str(row['備考'])
+                    '備考': str(row['備考']) if pd.notna(row['備考']) else '',
+                    '区分': category
                 })
         except Exception as e:
             st.error(f"データベースの読み込み中にエラーが発生しました: {e}")
@@ -346,7 +351,8 @@ search_filter = st.sidebar.text_input("データベース内を検索", placehol
 with st.sidebar.expander("登録済み全成分リスト", expanded=True):
     for item in db_data:
         if not search_filter or normalize_text(search_filter) in normalize_text(item['代表名']) or any(normalize_text(search_filter) in normalize_text(a) for a in item['別名リスト']):
-            st.caption(f"・**{item['代表名']}** ({item['表示用別名']})")
+            cat_tag = " `[開始剤]`" if item['区分'] == '開始剤' else ""
+            st.caption(f"・**{item['代表名']}** ({item['表示用別名']}){cat_tag}")
 
 st.markdown("<h1>成分から導き出す、次世代の安全性評価プロファイル</h1>", unsafe_allow_html=True)
 st.markdown("<p style='color:#777; font-size: 15px; font-weight: 500; margin-bottom: 20px; letter-spacing: 1.5px;'>NAIL GEL INGREDIENT SIMULATOR</p>", unsafe_allow_html=True)
@@ -392,7 +398,8 @@ if analyze_submitted:
                     'MW': found_item['MW'],
                     'EC3': found_item['EC3'],
                     'PII': found_item['PII'],
-                    '備考': found_item.get('備考', '')
+                    '備考': found_item.get('備考', ''),
+                    '区分': found_item.get('区分', '通常')
                 })
         else:
             unmatched_names.append(comp)
@@ -444,8 +451,13 @@ if analyze_submitted:
             
         st.markdown("<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:15px;'>01. 総合評価プロファイル</h3>", unsafe_allow_html=True)
         
-        worst_mw = df_matched['MW'].min()
-        worst_mw_name = df_matched.loc[df_matched['MW'].idxmin()]['表示用名称']
+        # ★ 浸透リスク（最小MW）は光重合開始剤を除外して評価（開始剤のみ入力時は全成分対象）
+        df_mw_target = df_matched[df_matched['区分'] != '開始剤']
+        if df_mw_target.empty:
+            df_mw_target = df_matched
+
+        worst_mw = df_mw_target['MW'].min()
+        worst_mw_name = df_mw_target.loc[df_mw_target['MW'].idxmin()]['表示用名称']
         
         worst_ec3 = df_matched['EC3'].min()
         worst_ec3_name = df_matched.loc[df_matched['EC3'].idxmin()]['表示用名称']
@@ -461,6 +473,8 @@ if analyze_submitted:
         col1.metric("浸透リスク (最小MW)", f"{worst_mw} Da", f"原因: {worst_mw_name}", delta_color="inverse")
         col2.metric("アレルギー (最低EC3)", f"{worst_ec3} %", f"原因: {worst_ec3_name}", delta_color="inverse")
         col3.metric("刺激リスク (最高PII)", f"{worst_pii}", f"原因: {worst_pii_name}", delta_color="inverse")
+        
+        st.markdown("<p style='font-size: 11px; color: #888; margin-top: 8px; margin-bottom: 12px;'>※総合評価における浸透リスク（最小MW）は、主成分である樹脂・モノマー等の設計を正確に評価するため、微量配合成分である光重合開始剤を除外して算出しています。</p>", unsafe_allow_html=True)
         
         if total_risk_idx < 25.0 and max(ts1, ts2, ts3) >= 8.0:
             st.warning("⚠️ **単一リスク突出警告**: 総合リスクは低めですが、特定のリスク項目が極めて高い水準にあります。")
