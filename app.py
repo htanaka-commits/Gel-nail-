@@ -116,38 +116,39 @@ st.markdown("""
     }
 
     /* =========================================================
-       ★ PDF出力用（印刷時）の最適化CSS
+       ★ PDF出力用（印刷時）の最適化CSS（A4・1ページ縮小版）
        ========================================================= */
     @media print {
         @page {
-            size: A4;
-            margin: 15mm;
+            size: A4 portrait;
+            margin: 10mm;
         }
-        /* 印刷時は不要なUI（入力欄、サイドバー、ボタン類）を完全に消す */
+        /* 印刷時は不要なUI（入力欄、サイドバー、ボタン類、区切り線）を完全に消す */
         [data-testid="stSidebar"], 
         header, 
         .stTextArea, 
         .stButton, 
-        iframe {
+        iframe,
+        hr {
             display: none !important;
         }
-        /* 背景色を綺麗な白に固定し、用紙にフィットさせる */
-        .stApp, .main, .block-container {
-            background-color: #FFFFFF !important;
-            padding: 0 !important;
+        /* A4 1ページに収めるための強力な縮小処理 */
+        .block-container {
+            zoom: 0.6 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
             max-width: 100% !important;
         }
-        /* 個別成分のカードがページまたぎで途中で切れないようにする設定 */
+        /* 背景色を綺麗な白に固定 */
+        .stApp, .main {
+            background-color: #FFFFFF !important;
+        }
+        /* 個別成分のカードの影を消し、ページ跨ぎを防ぐ */
         div[data-testid="stVerticalBlockBorderWrapper"] {
             page-break-inside: avoid !important;
             box-shadow: none !important;
-            border: 1px solid #EEEEEE !important;
-        }
-        /* グラフ画像をA4幅に収める */
-        img {
-            max-width: 100% !important;
-            height: auto !important;
-            page-break-inside: avoid !important;
+            border: 1px solid #DDDDDD !important;
+            margin-bottom: 5px !important;
         }
     }
 </style>
@@ -220,8 +221,8 @@ def get_risk_color_and_label(risk_idx):
 def render_risk_bar(risk_idx):
     color, label = get_risk_color_and_label(risk_idx)
     bar_html = f"""
-    <div style="margin: 20px 0 40px 0; padding: 35px 40px; background: #ffffff; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.04); border: 1px solid #F5F5F5;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <div style="margin: 10px 0 30px 0; padding: 30px 35px; background: #ffffff; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.04); border: 1px solid #F5F5F5;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
             <span style="font-size: 14px; font-weight: 600; color: #888; letter-spacing: 2px;">TOTAL RISK SCORE</span>
             <span style="font-size: 42px; font-weight: 300; color: {color}; line-height: 1;">{risk_idx}<span style="font-size: 20px; font-weight: 400; color: #BBBBBB; margin-left: 6px;">%</span></span>
         </div>
@@ -237,7 +238,7 @@ def render_risk_bar(risk_idx):
     """
     st.markdown(bar_html, unsafe_allow_html=True)
 
-def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
+def create_radar_chart(mw, ec3, pii, title="", figsize=(4.5, 4.5), font_size=9):
     risk_idx, (s1, s2, s3) = calc_risk_index(mw, ec3, pii)
     risk_scores = [s1, s2, s3]
     labels = ['浸透リスク\n(小MW)', 'アレルギー\n(低EC3)', '一次刺激\n(高PII)']
@@ -325,9 +326,8 @@ with st.sidebar.expander("登録済み全成分リスト", expanded=True):
         if not search_filter or normalize_text(search_filter) in normalize_text(item['代表名']) or any(normalize_text(search_filter) in normalize_text(a) for a in item['別名リスト']):
             st.caption(f"・**{item['代表名']}** ({item['別名リスト'][0]})")
 
-# ★変更箇所：タイトルとサブタイトルを反転させました
 st.markdown("<h1>成分から導き出す、次世代の安全性評価プロファイル</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color:#777; font-size: 15px; font-weight: 500; margin-bottom: 30px; letter-spacing: 1.5px;'>NAIL GEL INGREDIENT SIMULATOR</p>", unsafe_allow_html=True)
+st.markdown("<p style='color:#777; font-size: 15px; font-weight: 500; margin-bottom: 20px; letter-spacing: 1.5px;'>NAIL GEL INGREDIENT SIMULATOR</p>", unsafe_allow_html=True)
 
 input_text = st.text_area("成分表（カンマまたは読点区切り）を入力してください", 
                           key="input_area", height=120)
@@ -402,7 +402,7 @@ if analyze_submitted:
         df_matched = pd.DataFrame(matched_data)
         
         st.divider()
-        st.markdown("<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:20px;'>01. 総合評価プロファイル</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:15px;'>01. 総合評価プロファイル</h3>", unsafe_allow_html=True)
         
         worst_mw = df_matched['MW'].min()
         worst_mw_name = df_matched.loc[df_matched['MW'].idxmin()]['表示用名称']
@@ -425,7 +425,7 @@ if analyze_submitted:
         if total_risk_idx < 25.0 and max(ts1, ts2, ts3) >= 8.0:
             st.warning("⚠️ **単一リスク突出警告**: 総合リスクは低めですが、特定のリスク項目が極めて高い水準にあります。")
         
-        fig_total, _, _ = create_radar_chart(worst_mw, worst_ec3, worst_pii, title=f"全体のリスクバランス", figsize=(5.5, 5.5), font_size=10)
+        fig_total, _, _ = create_radar_chart(worst_mw, worst_ec3, worst_pii, title=f"全体のリスクバランス", figsize=(5.0, 5.0), font_size=10)
         
         _, center_col, _ = st.columns([1, 2, 1])
         with center_col:
@@ -433,7 +433,7 @@ if analyze_submitted:
             plt.close(fig_total)
 
         st.divider()
-        st.markdown("<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:20px;'>02. 成分別 リスクプロファイル</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:15px;'>02. 成分別 リスクプロファイル</h3>", unsafe_allow_html=True)
         
         cols_per_row = 3
         for idx in range(0, len(matched_data), cols_per_row):
@@ -444,7 +444,7 @@ if analyze_submitted:
                     with cols[j]:
                         with st.container(border=True):
                             fig_indiv, indiv_risk_idx, (is1, is2, is3) = create_radar_chart(
-                                item['MW'], item['EC3'], item['PII'], figsize=(4, 4), font_size=8
+                                item['MW'], item['EC3'], item['PII'], figsize=(3.8, 3.8), font_size=8
                             )
                             st.markdown(f"<div style='font-size:14px; font-weight:600; color:#333; text-align:center;'>{item['表示用名称']}</div>", unsafe_allow_html=True)
                             st.markdown(f"<div style='font-size:12px; color:#888; text-align:center; margin-bottom:10px;'>リスク指数: <span style='color:#333; font-weight:bold;'>{indiv_risk_idx}%</span></div>", unsafe_allow_html=True)
@@ -458,6 +458,14 @@ if analyze_submitted:
                             if item['備考']:
                                 st.markdown(f"<div style='font-size:11px; color:#666; padding:8px; background:#F9F9F9; border-radius:4px;'>{item['備考']}</div>", unsafe_allow_html=True)
         
-        # 最後にPDFエクスポートボタンを配置
-        st.divider()
+        # ★追加：法務・リスク管理のための免責事項（PDF出力時にも印字されます）
+        disclaimer_html = """
+        <div style="margin-top: 40px; padding: 20px; border: 1px solid #EAEAEA; border-radius: 8px; background-color: #FAFAFC; font-size: 11px; color: #888; line-height: 1.6; text-align: justify;">
+            <strong style="color: #555; letter-spacing: 1px;">DISCLAIMER / 免責事項</strong><br>
+            本シミュレーターは、各成分の特性データ（分子量・EC3・PII等）および独自のアルゴリズムに基づき、理論的なリスクスコアを算出するツールです。本評価結果は製品の絶対的な安全性を保証・証明するものではなく、アレルギー等の皮膚トラブルが一切発生しないことをお約束するものではありません。実際の製品の安全性は、配合バランス、硬化条件、およびご使用される方の体質・健康状態により異なります。本データはあくまで成分設計および安全性評価のための参考情報としてご活用ください。
+        </div>
+        """
+        st.markdown(disclaimer_html, unsafe_allow_html=True)
+        
+        # PDFエクスポートボタン
         render_pdf_export_button()
