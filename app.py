@@ -201,17 +201,24 @@ if st.button("リスクを解析する"):
         else:
             unmatched_names.append(comp)
 
-    # 2. 未登録成分に対するAI自動検索（フォールバック）
+    # 2. 未登録成分の処理（エラーリスト化とAI検索）
     if unmatched_names:
+        # まず真っ赤なエラーボックスで「未登録成分」をリストアップして警告する
+        st.error(f"🚨 **データベース未登録エラー**: 以下の {len(unmatched_names)} 成分がデータベースに見つかりませんでした。")
+        
+        # 管理者が後で database.csv に追加しやすいように、コピー可能なテキストボックスで出力
+        st.code("\n".join(unmatched_names), language="text")
+        st.caption("↑ 上記の成分をコピーして `database.csv` の追加・改善にお役立てください。")
+
         if not api_key:
-            st.warning(f"以下の成分はデータベースに未登録です。AI検索を行うにはサイドバーからAPIキーを設定してください。\n\n未登録成分: {', '.join(unmatched_names)}")
+            st.info("💡 サイドバーからAPIキーを設定すると、これらの未登録成分の毒性データをAIが即席で推論・補完してシミュレーションを続行します。")
         else:
             # 未知の成分が多すぎる場合はAPI制限オーバーを防ぐため最大5件でストップ
             if len(unmatched_names) > 5:
-                st.warning(f"⚠️ 未登録の成分が多すぎます（{len(unmatched_names)}件）。APIの無料枠を保護するため、上位5件のみAI検索を実行します。残りの成分も分析したい場合は、再度実行してください。")
+                st.warning(f"⚠️ 未登録成分が多すぎます（{len(unmatched_names)}件）。APIの無料枠を保護するため、上位5件のみAI検索を実行します。")
                 unmatched_names = unmatched_names[:5]
 
-            with st.spinner("未登録成分の毒性データをAI（公的機関データソース）で検索しています..."):
+            with st.spinner("未登録成分の毒性データをAI（公的機関データソース）で検索・補完しています..."):
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel('gemini-3.8-flash')
                 
