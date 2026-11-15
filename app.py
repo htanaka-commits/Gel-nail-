@@ -9,6 +9,7 @@ import re
 import math
 import os
 import requests
+import html
 
 # -------------------------
 # 0. ページ設定とハイエンド向けCSSデザイン
@@ -69,17 +70,17 @@ st.markdown("""
         background: #F0F0F0;
     }
     
-    /* テキスト入力エリア */
-    .stTextArea textarea {
+    /* テキスト入力エリア（製品名・成分表） */
+    .stTextInput input, .stTextArea textarea {
         border-radius: 12px;
         border: 1px solid #E0E0E0;
         background-color: #FFFFFF;
-        padding: 15px;
+        padding: 12px 15px;
         font-size: 14px;
         line-height: 1.6;
         box-shadow: inset 0 2px 5px rgba(0,0,0,0.01);
     }
-    .stTextArea textarea:focus {
+    .stTextInput input:focus, .stTextArea textarea:focus {
         border-color: #414345;
         box-shadow: 0 0 0 1px #414345;
     }
@@ -124,9 +125,10 @@ st.markdown("""
             margin: 10mm;
         }
         
-        /* 不要UIを隠す */
+        /* 不要UI（入力欄含む）を隠す */
         [data-testid="stSidebar"], 
         header, 
+        .stTextInput,
         .stTextArea, 
         .stButton, 
         iframe,
@@ -321,7 +323,11 @@ if not db_data:
     st.stop()
 
 def clear_text():
+    st.session_state['product_name'] = ""
     st.session_state['input_area'] = ""
+
+if 'product_name' not in st.session_state:
+    st.session_state['product_name'] = ""
 
 if 'input_area' not in st.session_state:
     st.session_state['input_area'] = "ウレタンアクリレート, メタクリル酸2-ヒドロキシエチル, 酸化チタン, 赤色202号, TPO, 酢酸エチル"
@@ -337,6 +343,9 @@ with st.sidebar.expander("登録済み全成分リスト", expanded=True):
 
 st.markdown("<h1>成分から導き出す、次世代の安全性評価プロファイル</h1>", unsafe_allow_html=True)
 st.markdown("<p style='color:#777; font-size: 15px; font-weight: 500; margin-bottom: 20px; letter-spacing: 1.5px;'>NAIL GEL INGREDIENT SIMULATOR</p>", unsafe_allow_html=True)
+
+# ★ 製品名入力欄
+product_name = st.text_input("製品名（任意・レポートに反映されます）", key="product_name", placeholder="例: KLOS ベースジェル 01")
 
 input_text = st.text_area("成分表（カンマまたは読点区切り）を入力してください", 
                           key="input_area", height=120)
@@ -409,8 +418,19 @@ if analyze_submitted:
     # -------------------------
     if matched_data:
         df_matched = pd.DataFrame(matched_data)
+        safe_product_name = html.escape(product_name.strip())
         
         st.divider()
+        
+        # ★ 製品名が入力されている場合、レポート用ヘッダーカードを表示
+        if safe_product_name:
+            st.markdown(f"""
+            <div style="margin-bottom: 20px; padding: 14px 24px; background-color: #FFFFFF; border-left: 4px solid #232526; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
+                <span style="font-size: 11px; font-weight: 600; color: #888; letter-spacing: 2px; display: block; margin-bottom: 4px;">TARGET PRODUCT / 評価対象製品</span>
+                <span style="font-size: 20px; font-weight: 500; color: #111; letter-spacing: 0.5px;">{safe_product_name}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
         st.markdown("<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:15px;'>01. 総合評価プロファイル</h3>", unsafe_allow_html=True)
         
         worst_mw = df_matched['MW'].min()
@@ -445,21 +465,19 @@ if analyze_submitted:
         st.markdown('<div style="page-break-before: always; clear: both;"></div>', unsafe_allow_html=True)
         
         st.divider()
-        st.markdown("<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:15px;'>02. 成分別 リスクプロファイル</h3>", unsafe_allow_html=True)
+        product_sub_label = f"<span style='font-size: 14px; color: #777; font-weight: 400; margin-left: 12px;'>— {safe_product_name}</span>" if safe_product_name else ""
+        st.markdown(f"<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:15px;'>02. 成分別 リスクプロファイル{product_sub_label}</h3>", unsafe_allow_html=True)
         
         # ★ 1ページに最大6個（2行×3列）ずつ出力し、6個ごとに強制改ページを入れるロジック
         items_per_page = 6
         cols_per_row = 3
         
         for page_start in range(0, len(matched_data), items_per_page):
-            # 2ページ目以降（2つ目のブロック以降）は、表示前に強制改ページ
             if page_start > 0:
                 st.markdown('<div style="page-break-before: always; clear: both;"></div>', unsafe_allow_html=True)
             
-            # 今回のページに表示する成分（最大6個）を切り出す
             page_items = matched_data[page_start:page_start+items_per_page]
             
-            # 3列ずつ（最大2行）描画する
             for row_start in range(0, len(page_items), cols_per_row):
                 cols = st.columns(cols_per_row)
                 row_items = page_items[row_start:row_start+cols_per_row]
@@ -482,7 +500,7 @@ if analyze_submitted:
                             if item['備考']:
                                 st.markdown(f"<div style='font-size:11px; color:#666; padding:8px; background:#F9F9F9; border-radius:4px;'>{item['備考']}</div>", unsafe_allow_html=True)
         
-        # 最後に免責事項を配置（ページ内に収まる場合はそのまま、溢れる場合は自動的に次のページへ）
+        # 最後に免責事項を配置
         disclaimer_html = """
         <div style="page-break-inside: avoid; margin-top: 40px; padding: 20px; border: 1px solid #EAEAEA; border-radius: 8px; background-color: #FAFAFC; font-size: 11px; color: #888; line-height: 1.6; text-align: justify;">
             <strong style="color: #555; letter-spacing: 1px;">DISCLAIMER / 免責事項</strong><br>
