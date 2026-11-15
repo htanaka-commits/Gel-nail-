@@ -9,6 +9,7 @@ import json
 import re
 import math
 import os
+import requests
 from PIL import Image
 
 # -------------------------
@@ -201,14 +202,33 @@ if st.button("リスクを解析する"):
         else:
             unmatched_names.append(comp)
 
-    # 2. 未登録成分の処理（エラーリスト化とAI検索）
+    # 2. 未登録成分の処理（スプレッドシートへの自動記録とエラーリスト化、AI検索）
     if unmatched_names:
-        # まず真っ赤なエラーボックスで「未登録成分」をリストアップして警告する
+        # 重複送信を防ぐための記録用関数
+        def log_to_spreadsheet(unmatched_list):
+            current_list_str = ",".join(unmatched_list)
+            if st.session_state.get('last_logged_list') == current_list_str:
+                return
+            
+            # あなた専用の送信先URLと項目ID
+            url = "https://docs.google.com/forms/d/e/1FAIpQLSdiSHSWGtG2th3k5uvU5lOujfDGjLqLXIUHIt-olNK4RxCJtg/formResponse"
+            form_data = {"entry.796504215": current_list_str}
+            
+            try:
+                requests.post(url, data=form_data)
+                st.session_state['last_logged_list'] = current_list_str
+            except Exception:
+                pass # 失敗してもアプリを止めない
+
+        # スプレッドシートへの自動送信を実行
+        log_to_spreadsheet(unmatched_names)
+
+        # 画面上に真っ赤なエラーボックスで警告を出す
         st.error(f"🚨 **データベース未登録エラー**: 以下の {len(unmatched_names)} 成分がデータベースに見つかりませんでした。")
         
-        # 管理者が後で database.csv に追加しやすいように、コピー可能なテキストボックスで出力
+        # コピー可能なテキストボックスで出力
         st.code("\n".join(unmatched_names), language="text")
-        st.caption("↑ 上記の成分をコピーして `database.csv` の追加・改善にお役立てください。")
+        st.caption("※この未登録成分は、管理者用のスプレッドシートに自動で報告されました。")
 
         if not api_key:
             st.info("💡 サイドバーからAPIキーを設定すると、これらの未登録成分の毒性データをAIが即席で推論・補完してシミュレーションを続行します。")
