@@ -116,14 +116,14 @@ st.markdown("""
     }
 
     /* =========================================================
-       ★ PDF出力用（印刷時）の最適化CSS（A4・1ページ縮小版）
+       ★ PDF出力用（印刷時）の最適化CSS（A4・改ページ崩れ防止版）
        ========================================================= */
     @media print {
         @page {
             size: A4 portrait;
             margin: 10mm;
         }
-        /* 印刷時は不要なUI（入力欄、サイドバー、ボタン類、区切り線）を完全に消す */
+        /* 印刷時は不要なUIを完全に消す */
         [data-testid="stSidebar"], 
         header, 
         .stTextArea, 
@@ -132,23 +132,43 @@ st.markdown("""
         hr {
             display: none !important;
         }
-        /* A4 1ページに収めるための強力な縮小処理 */
+        
+        /* A4に収める縮小処理 */
         .block-container {
-            zoom: 0.6 !important;
+            zoom: 0.65 !important;
             padding-top: 0 !important;
             padding-bottom: 0 !important;
             max-width: 100% !important;
         }
-        /* 背景色を綺麗な白に固定 */
+        
         .stApp, .main {
             background-color: #FFFFFF !important;
         }
-        /* 個別成分のカードの影を消し、ページ跨ぎを防ぐ */
+        
+        /* ★ 修正箇所：カードやカラムの途中での改ページ（ページ跨ぎ）を強制的に禁止する */
+        div[data-testid="column"] {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+        
         div[data-testid="stVerticalBlockBorderWrapper"] {
             page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            -webkit-column-break-inside: avoid !important;
+            display: block !important; /* 要素の崩れを防ぐ */
             box-shadow: none !important;
             border: 1px solid #DDDDDD !important;
-            margin-bottom: 5px !important;
+            margin-bottom: 15px !important;
+        }
+        
+        /* グラフ画像の分離を防ぐ */
+        img {
+            max-width: 100% !important;
+            height: auto !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            display: block !important;
+            margin: 0 auto !important;
         }
     }
 </style>
@@ -458,7 +478,7 @@ if analyze_submitted:
                             if item['備考']:
                                 st.markdown(f"<div style='font-size:11px; color:#666; padding:8px; background:#F9F9F9; border-radius:4px;'>{item['備考']}</div>", unsafe_allow_html=True)
         
-        # ★追加：法務・リスク管理のための免責事項（PDF出力時にも印字されます）
+        # 免責事項
         disclaimer_html = """
         <div style="margin-top: 40px; padding: 20px; border: 1px solid #EAEAEA; border-radius: 8px; background-color: #FAFAFC; font-size: 11px; color: #888; line-height: 1.6; text-align: justify;">
             <strong style="color: #555; letter-spacing: 1px;">DISCLAIMER / 免責事項</strong><br>
