@@ -90,7 +90,7 @@ st.markdown("""
         box-shadow: 0 8px 25px rgba(0,0,0,0.03);
         border: 1px solid rgba(0,0,0,0.02);
         border-left: none;
-        text-align: center; /* 中央揃えで美しく */
+        text-align: center;
     }
     div[data-testid="stMetricLabel"] {
         justify-content: center;
@@ -181,7 +181,6 @@ def get_risk_color_and_label(risk_idx):
 
 def render_risk_bar(risk_idx):
     color, label = get_risk_color_and_label(risk_idx)
-    # スタイリッシュでスリムなハイエンドデザイン
     bar_html = f"""
     <div style="margin: 20px 0 40px 0; padding: 35px 40px; background: #ffffff; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.04); border: 1px solid #F5F5F5;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -223,14 +222,14 @@ def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
     ax.plot(angles, risk_scores, color=color, linewidth=1.5, linestyle='solid')
     ax.fill(angles, risk_scores, color=color, alpha=0.2)
     
-    # 線の色や背景色をエレガントに調整
     ax.spines['polar'].set_color('#E0E0E0')
     ax.grid(color='#EAEAEA')
     fig.patch.set_facecolor('#FFFFFF')
     ax.set_facecolor('#FFFFFF')
     
     if title:
-        plt.title(title, size=font_size+2, fontweight='300', pad=15, color='#333333', letter-spacing='1px')
+        # エラーになっていた letter-spacing を削除しました
+        plt.title(title, size=font_size+2, fontweight='300', pad=15, color='#333333')
         
     plt.tight_layout()
     return fig, risk_idx, (s1, s2, s3)
@@ -243,11 +242,9 @@ if not db_data:
     st.error("🚨 データベースファイル (`database.csv`) が見つかりません。")
     st.stop()
 
-# クリアボタン用のコールバック関数
 def clear_text():
     st.session_state['input_area'] = ""
 
-# 初期値の設定
 if 'input_area' not in st.session_state:
     st.session_state['input_area'] = "ウレタンアクリレート, メタクリル酸2-ヒドロキシエチル, 酸化チタン, 赤色202号, TPO, 酢酸エチル"
 
@@ -263,11 +260,9 @@ with st.sidebar.expander("登録済み全成分リスト", expanded=True):
 st.markdown("<h1>NAIL GEL INGREDIENT SIMULATOR</h1>", unsafe_allow_html=True)
 st.markdown("<p style='color:#777; margin-bottom: 30px; letter-spacing: 0.5px;'>成分から導き出す、次世代の安全性評価プロファイル</p>", unsafe_allow_html=True)
 
-# テキストエリア
 input_text = st.text_area("成分表（カンマまたは読点区切り）を入力してください", 
                           key="input_area", height=120)
 
-# 解析ボタンとクリアボタン
 col1, col2 = st.columns([4, 1])
 with col1:
     analyze_submitted = st.button("ANALYSIS / 解析を実行")
@@ -310,7 +305,6 @@ if analyze_submitted:
             unmatched_names.append(comp)
             all_analyzed_names.append(f"【未】{comp}")
 
-    # スプレッドシートへの送信
     def log_to_spreadsheet(component_list):
         if not component_list:
             return
@@ -353,7 +347,6 @@ if analyze_submitted:
         
         total_risk_idx, (ts1, ts2, ts3) = calc_risk_index(worst_mw, worst_ec3, worst_pii)
         
-        # 美しいプログレスバーを描画
         render_risk_bar(total_risk_idx)
         
         col1, col2, col3 = st.columns(3)
