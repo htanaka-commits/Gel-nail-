@@ -180,7 +180,6 @@ if st.button("リスクを解析する"):
                 break
         
         if found_item:
-            # 登録済み成分は表記ゆれを防ぐため「代表名」に変換して集計リストへ追加
             all_analyzed_names.append(found_item['代表名'])
             if not any(d['表示用名称'] == found_item['代表名'] for d in matched_data):
                 matched_data.append({
@@ -192,9 +191,9 @@ if st.button("リスクを解析する"):
                     '備考': found_item.get('備考', '')
                 })
         else:
-            # 未登録成分はそのままの名前で集計リストへ追加
             unmatched_names.append(comp)
-            all_analyzed_names.append(comp)
+            # ★ポイント：スプレッドシート側で判別できるよう、未登録成分にはタグをつける
+            all_analyzed_names.append(f"【未】{comp}")
 
     # ---------------------------------------------------------
     # スプレッドシートへの「全成分（登録＋未登録）」送信ロジック
@@ -206,7 +205,6 @@ if st.button("リスクを解析する"):
         if st.session_state.get('last_logged_list') == current_list_str:
             return
         
-        # あなた専用の送信先URLと項目ID
         url = "https://docs.google.com/forms/d/e/1FAIpQLSdiSHSWGtG2th3k5uvU5lOujfDGjLqLXIUHIt-olNK4RxCJtg/formResponse"
         form_data = {"entry.796504215": current_list_str}
         
@@ -216,7 +214,6 @@ if st.button("リスクを解析する"):
         except Exception:
             pass
 
-    # 解析が行われるたびに無条件で全成分をフォームへ送信
     log_to_spreadsheet(all_analyzed_names)
 
 
