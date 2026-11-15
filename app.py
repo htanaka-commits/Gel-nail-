@@ -169,7 +169,7 @@ st.markdown("""
 # -------------------------
 # 1. データベース読み込み
 # -------------------------
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_database():
     db_list = []
     file_path = 'database.csv'
@@ -181,9 +181,16 @@ def load_database():
                 df = pd.read_csv(file_path, encoding='cp932')
                 
             for _, row in df.iterrows():
+                rep_name = str(row['代表名']).strip()
+                # カッコ内のカンマでは分割しないように修正
+                raw_aliases = [alias.strip() for alias in re.split(r',\s*(?![^\(]*\))', str(row['別名リスト'])) if alias.strip()]
+                # 代表名と別名の両方を重複なしで検索対象に含める
+                search_aliases = list(dict.fromkeys([rep_name] + raw_aliases))
+                
                 db_list.append({
-                    '代表名': str(row['代表名']).strip(),
-                    '別名リスト': [alias.strip() for alias in str(row['別名リスト']).split(',')],
+                    '代表名': rep_name,
+                    '別名リスト': search_aliases,
+                    '表示用別名': raw_aliases[0] if raw_aliases else rep_name,
                     'MW': float(row['MW']),
                     'EC3': float(row['EC3']),
                     'PII': float(row['PII']),
@@ -339,7 +346,7 @@ search_filter = st.sidebar.text_input("データベース内を検索", placehol
 with st.sidebar.expander("登録済み全成分リスト", expanded=True):
     for item in db_data:
         if not search_filter or normalize_text(search_filter) in normalize_text(item['代表名']) or any(normalize_text(search_filter) in normalize_text(a) for a in item['別名リスト']):
-            st.caption(f"・**{item['代表名']}** ({item['別名リスト'][0]})")
+            st.caption(f"・**{item['代表名']}** ({item['表示用別名']})")
 
 st.markdown("<h1>成分から導き出す、次世代の安全性評価プロファイル</h1>", unsafe_allow_html=True)
 st.markdown("<p style='color:#777; font-size: 15px; font-weight: 500; margin-bottom: 20px; letter-spacing: 1.5px;'>NAIL GEL INGREDIENT SIMULATOR</p>", unsafe_allow_html=True)
@@ -391,7 +398,6 @@ if analyze_submitted:
             unmatched_names.append(comp)
             all_analyzed_names.append(f"【未】{comp}")
 
-    # ★ 製品名を含めてGoogleフォーム（スプレッドシート）へ送信
     def log_to_spreadsheet(component_list, prod_name=""):
         if not component_list:
             return
