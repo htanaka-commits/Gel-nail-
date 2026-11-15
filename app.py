@@ -27,8 +27,9 @@ st.markdown("""
     h1 {
         color: #111111;
         font-weight: 300;
-        letter-spacing: 2px;
-        padding-bottom: 10px;
+        letter-spacing: 1.5px;
+        padding-bottom: 5px;
+        font-size: 28px !important;
     }
     
     /* 解析ボタン */
@@ -324,8 +325,9 @@ with st.sidebar.expander("登録済み全成分リスト", expanded=True):
         if not search_filter or normalize_text(search_filter) in normalize_text(item['代表名']) or any(normalize_text(search_filter) in normalize_text(a) for a in item['別名リスト']):
             st.caption(f"・**{item['代表名']}** ({item['別名リスト'][0]})")
 
-st.markdown("<h1>NAIL GEL INGREDIENT SIMULATOR</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color:#777; margin-bottom: 30px; letter-spacing: 0.5px;'>成分から導き出す、次世代の安全性評価プロファイル</p>", unsafe_allow_html=True)
+# ★変更箇所：タイトルとサブタイトルを反転させました
+st.markdown("<h1>成分から導き出す、次世代の安全性評価プロファイル</h1>", unsafe_allow_html=True)
+st.markdown("<p style='color:#777; font-size: 15px; font-weight: 500; margin-bottom: 30px; letter-spacing: 1.5px;'>NAIL GEL INGREDIENT SIMULATOR</p>", unsafe_allow_html=True)
 
 input_text = st.text_area("成分表（カンマまたは読点区切り）を入力してください", 
                           key="input_area", height=120)
@@ -338,9 +340,9 @@ with col2:
 
 if analyze_submitted:
     split_pattern = r'[,、]\s*(?![^\(]*\))'
-    components = [c.strip() for c in re.split(split_pattern, input_text) if c.strip()]
+    parsed_components = [c.strip() for c in re.split(split_pattern, input_text) if c.strip()]
     
-    if not components:
+    if not parsed_components:
         st.warning("成分が入力されていません。")
         st.stop()
 
@@ -348,7 +350,7 @@ if analyze_submitted:
     unmatched_names = []
     all_analyzed_names = []
     
-    for comp in components:
+    for comp in parsed_components:
         norm_comp = normalize_text(comp)
         found_item = None
         for item in db_data:
@@ -402,7 +404,6 @@ if analyze_submitted:
         st.divider()
         st.markdown("<h3 style='color:#333; font-weight:400; letter-spacing:1px; margin-bottom:20px;'>01. 総合評価プロファイル</h3>", unsafe_allow_html=True)
         
-        # ★変更点：入力された「全成分」の中から最もMWが小さい成分をワーストとして厳密に評価する
         worst_mw = df_matched['MW'].min()
         worst_mw_name = df_matched.loc[df_matched['MW'].idxmin()]['表示用名称']
         
