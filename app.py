@@ -21,7 +21,6 @@ def load_database():
     file_path = 'database.csv'
     if os.path.exists(file_path):
         try:
-            # エンコーディングの自動判別（UTF-8 または Shift-JIS）
             try:
                 df = pd.read_csv(file_path, encoding='utf-8-sig')
             except UnicodeDecodeError:
@@ -49,12 +48,8 @@ def normalize_text(text):
 # 2. リスク計算＆リスク指数算出関数
 # -------------------------
 def norm_mw(mw): 
-    # 500ダルトンルール：MW500以上は物理的に皮膚透過が不可能
     if mw >= 500:
         return 0.0
-    
-    # Potts-Guyモデルに基づく「遅れ時間(Lag Time)」を考慮したロジスティック関数(シグモイド曲線)
-    # 分子量100〜200は手洗いに間に合わず浸透リスクが極大化(飽和)し、260付近から急激に洗い流せる確率が上がる
     score = 10.0 / (1.0 + math.exp(0.022 * (mw - 260)))
     return max(0.0, min(10.0, round(score, 1)))
 
@@ -112,14 +107,14 @@ def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
 st.set_page_config(page_title="ジェルネイル成分リスク評価シミュレーター", layout="wide")
 
 if not db_data:
-    st.error("🚨 データベースファイル (`database.csv`) が見つかりません。GitHubリポジトリに `database.csv` をアップロードしてください。")
+    st.error("🚨 データベースファイル (`database.csv`) が見つかりません。")
     st.stop()
 
 if 'input_text' not in st.session_state:
     st.session_state['input_text'] = "ウレタンアクリレート, メタクリル酸2-ヒドロキシエチル, 酸化チタン, 赤色202号, TPO, 酢酸エチル"
 
 st.sidebar.title("📚 成分データベース情報")
-st.sidebar.info(f"現在 **{len(db_data)}種類** の成分（顔料・色素等のグループ分類含む）がローカル登録されています。")
+st.sidebar.info(f"現在 **{len(db_data)}種類** の成分がローカル登録されています。")
 
 search_filter = st.sidebar.text_input("データベース内をキーワード検索", placeholder="例: メタクリル酸, 酢酸, 酸化チタン")
 with st.sidebar.expander("登録済み全成分リストを見る", expanded=True):
@@ -129,12 +124,7 @@ with st.sidebar.expander("登録済み全成分リストを見る", expanded=Tru
 
 st.sidebar.markdown("---")
 st.sidebar.title("🔑 AI機能（拡張ツール）")
-st.sidebar.markdown(
-    "パッケージの画像読み取り(OCR)や、未知の成分のAI自動検索を使うには、**ご自身のGemini APIキー**が必要です。\n\n"
-    "👉 [完全無料のAPIキー取得はこちら(Google AI Studio)](https://aistudio.google.com/app/apikey)"
-)
 api_key = st.sidebar.text_input("Gemini APIキーを入力", type="password")
-
 if api_key:
     st.sidebar.success("✅ APIキー設定完了！AI機能が利用可能です。")
 
@@ -168,7 +158,6 @@ input_text = st.text_area("▼ ここに成分表をカンマ（,）または読
 if st.button("リスクを解析する"):
     st.session_state['input_text'] = input_text
     
-    # カッコ()の中にあるカンマでは区切らないようにする安全な分割処理
     split_pattern = r'[,、]\s*(?![^\(]*\))'
     components = [c.strip() for c in re.split(split_pattern, input_text) if c.strip()]
     
@@ -178,6 +167,7 @@ if st.button("リスクを解析する"):
 
     matched_data = []
     unmatched_names = []
+    all_analyzed_names = [] # 集計用の全成分リスト
     
     # 1. ローカルデータベース検索
     for comp in components:
@@ -190,6 +180,8 @@ if st.button("リスクを解析する"):
                 break
         
         if found_item:
+            # 登録済み成分は表記ゆれを防ぐため「代表名」に変換して集計リストへ追加
+            all_analyzed_names.append(found_item['代表名'])
             if not any(d['表示用名称'] == found_item['代表名'] for d in matched_data):
                 matched_data.append({
                     '成分名': found_item['代表名'],
@@ -200,40 +192,43 @@ if st.button("リスクを解析する"):
                     '備考': found_item.get('備考', '')
                 })
         else:
+            # 未登録成分はそのままの名前で集計リストへ追加
             unmatched_names.append(comp)
+            all_analyzed_names.append(comp)
 
-    # 2. 未登録成分の処理（スプレッドシートへの自動記録とエラーリスト化、AI検索）
-    if unmatched_names:
-        # 重複送信を防ぐための記録用関数
-        def log_to_spreadsheet(unmatched_list):
-            current_list_str = ",".join(unmatched_list)
-            if st.session_state.get('last_logged_list') == current_list_str:
-                return
-            
-            # あなた専用の送信先URLと項目ID
-            url = "https://docs.google.com/forms/d/e/1FAIpQLSdiSHSWGtG2th3k5uvU5lOujfDGjLqLXIUHIt-olNK4RxCJtg/formResponse"
-            form_data = {"entry.796504215": current_list_str}
-            
-            try:
-                requests.post(url, data=form_data)
-                st.session_state['last_logged_list'] = current_list_str
-            except Exception:
-                pass # 失敗してもアプリを止めない
-
-        # スプレッドシートへの自動送信を実行
-        log_to_spreadsheet(unmatched_names)
-
-        # 画面上に真っ赤なエラーボックスで警告を出す
-        st.error(f"🚨 **データベース未登録エラー**: 以下の {len(unmatched_names)} 成分がデータベースに見つかりませんでした。")
+    # ---------------------------------------------------------
+    # スプレッドシートへの「全成分（登録＋未登録）」送信ロジック
+    # ---------------------------------------------------------
+    def log_to_spreadsheet(component_list):
+        if not component_list:
+            return
+        current_list_str = ",".join(component_list)
+        if st.session_state.get('last_logged_list') == current_list_str:
+            return
         
-        # コピー可能なテキストボックスで出力
+        # あなた専用の送信先URLと項目ID
+        url = "https://docs.google.com/forms/d/e/1FAIpQLSdiSHSWGtG2th3k5uvU5lOujfDGjLqLXIUHIt-olNK4RxCJtg/formResponse"
+        form_data = {"entry.796504215": current_list_str}
+        
+        try:
+            requests.post(url, data=form_data)
+            st.session_state['last_logged_list'] = current_list_str
+        except Exception:
+            pass
+
+    # 解析が行われるたびに無条件で全成分をフォームへ送信
+    log_to_spreadsheet(all_analyzed_names)
+
+
+    # 2. 未登録成分の画面警告とAI検索
+    if unmatched_names:
+        st.error(f"🚨 **データベース未登録エラー**: 以下の {len(unmatched_names)} 成分がデータベースに見つかりませんでした。")
         st.code("\n".join(unmatched_names), language="text")
-        st.caption("※この未登録成分は、管理者用のスプレッドシートに自動で報告されました。")
+        st.caption("※管理者のダッシュボードには報告済みです。")
 
         if not api_key:
             st.info("💡 サイドバーからAPIキーを設定すると、これらの未登録成分の毒性データをAIが即席で推論・補完してシミュレーションを続行します。")
         else:
-            # 未知の成分が多すぎる場合はAPI制限オーバーを防ぐため最大5件でストップ
             if len(unmatched_names) > 5:
                 st.warning(f"⚠️ 未登録成分が多すぎます（{len(unmatched_names)}件）。APIの無料枠を保護するため、上位5件のみAI検索を実行します。")
                 unmatched_names = unmatched_names[:5]
@@ -244,16 +239,14 @@ if st.button("リスクを解析する"):
                 
                 for u_comp in unmatched_names:
                     prompt = f"""
-                    あなたは毒性学の専門家です。ジェルネイル・化粧品成分「{u_comp}」について、ECHA（欧州化学品庁）、CIR（化粧品成分審査パネル）、SCCSなどの公的機関のデータに基づき、以下の情報をJSON形式のみで出力してください。
-                    正確な値が不明な場合は、類似の化学構造から推定されるワーストケースの値を出力してください。
-                    
-                    出力フォーマット（これ以外の文字やMarkdown記号は絶対に出力しないでください）:
+                    あなたは毒性学の専門家です。ジェルネイル・化粧品成分「{u_comp}」について、ECHA、CIR、SCCSなどの公的機関データに基づきJSON形式で出力。
+                    出力フォーマット:
                     {{
                         "JP_NAME": "日本語の正式な成分名",
-                        "MW": 分子量(数値のみ),
-                        "EC3": LLNA EC3値%(数値のみ、非感作性なら35.0),
-                        "PII": 一次刺激性指数(0〜8の数値のみ),
-                        "REMARKS": "【AI推論/出典: (参考にした機関名)】 ...妥当性の説明..."
+                        "MW": 分子量(数値),
+                        "EC3": LLNA EC3値%(数値、非感作性なら35.0),
+                        "PII": 一次刺激性指数(0〜8の数値),
+                        "REMARKS": "【AI推論】 ..."
                     }}
                     """
                     try:
@@ -270,7 +263,7 @@ if st.button("リスクを解析する"):
                             '備考': ai_data.get('REMARKS', '【AI推論】詳細不明')
                         })
                     except Exception as e:
-                        st.error(f"「{u_comp}」のAI検索中にエラーが発生しました: {e}")
+                        st.error(f"「{u_comp}」のAI検索中にエラー: {e}")
 
     # -------------------------
     # 4. 評価とチャート描画
@@ -281,7 +274,6 @@ if st.button("リスクを解析する"):
         st.divider()
         st.subheader("📊 1. 製品全体の総合評価（ワーストケース・ボトルネック）")
         
-        # 浸透リスク（MW）はPotts-Guyモデルに基づき、最もスコアが高くなる(MWが小さい)成分をワーストとする
         base_components = df_matched.head(5)
         worst_mw = base_components['MW'].min()
         worst_mw_name = base_components.loc[base_components['MW'].idxmin()]['表示用名称']
@@ -307,7 +299,7 @@ if st.button("リスクを解析する"):
         col3.metric("刺激リスク (最高PII)", f"{worst_pii}", f"原因: {worst_pii_name}", delta_color="inverse")
         
         if total_risk_idx < 25.0 and max(ts1, ts2, ts3) >= 8.0:
-            st.warning("⚠️ **単一リスク突出警告**: 総合リスク指数は低めですが、特定のリスク項目（アレルギー感作性や浸透性など）が極めて高い水準にあります。使用時は皮膚への付着に厳重な注意が必要です。")
+            st.warning("⚠️ **単一リスク突出警告**: 総合リスク指数は低めですが、特定のリスク項目が極めて高い水準にあります。皮膚への付着に注意が必要です。")
         
         _, center_col, _ = st.columns([1, 2, 1])
         with center_col:
@@ -326,11 +318,7 @@ if st.button("リスクを解析する"):
                     with cols[j]:
                         with st.container(border=True):
                             fig_indiv, indiv_risk_idx, (is1, is2, is3) = create_radar_chart(
-                                item['MW'], 
-                                item['EC3'], 
-                                item['PII'], 
-                                figsize=(4, 4), 
-                                font_size=8
+                                item['MW'], item['EC3'], item['PII'], figsize=(4, 4), font_size=8
                             )
                             st.markdown(f"**{idx + j + 1}. {item['表示用名称']}**")
                             st.markdown(f"リスク指数: **`{indiv_risk_idx}%`**")
