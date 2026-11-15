@@ -14,7 +14,7 @@ import requests
 # -------------------------
 st.set_page_config(page_title="ジェルネイル成分リスク評価シミュレーター", layout="wide")
 
-# ★スタイリッシュにするためのカスタムCSS
+# ★スタイリッシュにするためのカスタムCSS（フォームボタンにも対応）
 st.markdown("""
 <style>
     /* 全体の背景色とフォントを整える */
@@ -30,8 +30,8 @@ st.markdown("""
         letter-spacing: 1.5px;
     }
     
-    /* ボタンを美しいグラデーションと立体感に */
-    .stButton > button {
+    /* 通常ボタン・フォームボタンを美しいグラデーションと立体感に */
+    .stButton > button, [data-testid="stFormSubmitButton"] > button {
         background: linear-gradient(135deg, #6B73FF 0%, #000DFF 100%);
         color: white;
         border: none;
@@ -43,7 +43,7 @@ st.markdown("""
         transition: all 0.3s ease;
         width: 100%;
     }
-    .stButton > button:hover {
+    .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
         box-shadow: 0 6px 12px rgba(0,0,0,0.2);
         transform: translateY(-2px);
     }
@@ -148,7 +148,6 @@ def get_risk_color_and_label(risk_idx):
 
 def render_risk_bar(risk_idx):
     color, label = get_risk_color_and_label(risk_idx)
-    # 立体感を持たせたスタイリッシュなプログレスバー
     bar_html = f"""
     <div style="margin-top: 15px; margin-bottom: 35px; padding: 25px; background: linear-gradient(145deg, #ffffff, #f0f0f0); border-radius: 16px; box-shadow: 4px 4px 15px rgba(0,0,0,0.05), -4px -4px 15px #ffffff;">
         <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px;">
@@ -190,7 +189,6 @@ def create_radar_chart(mw, ec3, pii, title="", figsize=(5, 5), font_size=9):
     ax.plot(angles, risk_scores, color=color, linewidth=2, linestyle='solid')
     ax.fill(angles, risk_scores, color=color, alpha=0.3)
     
-    # チャートの背景色を極薄いグレーにして洗練させる
     fig.patch.set_facecolor('#FAFAFC')
     ax.set_facecolor('#FAFAFC')
     
@@ -223,10 +221,15 @@ with st.sidebar.expander("登録済み全成分リスト", expanded=True):
 st.title("💅 ジェルネイル成分 リスクシミュレーター")
 st.markdown("ローカルデータベースを参照し、ジェルネイル成分の毒性リスクを算出します。未登録の成分は自動的に管理者に報告され、順次データベースへ追加されます。")
 
-input_text = st.text_area("▼ ここに成分表をカンマ（,）または読点（、）区切りで入力", 
-                          value=st.session_state['input_text'], height=120)
+# ★ここで「フォーム」機能を使用し、Ctrl+Enterを不要にする
+with st.form("analyze_form"):
+    input_text = st.text_area("▼ ここに成分表をカンマ（,）または読点（、）区切りで入力", 
+                              value=st.session_state['input_text'], height=120)
+    
+    # フォーム内の送信ボタン
+    submitted = st.form_submit_button("リスクを解析する ✨")
 
-if st.button("リスクを解析する ✨"):
+if submitted:
     st.session_state['input_text'] = input_text
     
     split_pattern = r'[,、]\s*(?![^\(]*\))'
